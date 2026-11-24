@@ -1,0 +1,353 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="x-ua-compatible" content="ie=edge">
+<title>ffmpeg 转换</title>
+<hta:application id="app" applicationname="ffmpeg转换" border="thin" caption="yes" scroll="auto" singleinstance="yes" maximizebutton="no" />
+<style>
+body{margin:0;padding:22px 26px;background:#eef1ee;color:#1c2b27;font:14px/1.6 "Microsoft YaHei",sans-serif}
+h1{font-size:20px;margin:0 0 2px}
+#ver{color:#5d6f69;font-size:12px;margin:0 0 6px;word-break:break-all}
+#ver.bad{color:#b3361f}
+.row{margin-top:12px}
+label{display:block;color:#5d6f69;font-size:12px;margin-bottom:3px}
+select,input[type=text],input[type=file]{width:100%;padding:6px 8px;font:inherit;border:1px solid #c9d3cf;background:#fff;box-sizing:border-box}
+select[disabled]{background:#e4e9e6;color:#8a9a94}
+.flex{display:flex;align-items:center}
+.flex input,.flex select{flex:1;min-width:0}
+.flex .sep{padding:0 10px;color:#5d6f69}
+.flex .ext{padding-left:8px;color:#5d6f69}
+.flex button{margin:0 0 0 8px;padding:6px 12px;font-weight:normal;white-space:nowrap}
+.cols{display:flex}
+.cols>div{flex:1;min-width:0;margin-right:10px}
+.cols>div:last-child{margin-right:0}
+.hint{font-size:11px;color:#5d6f69;margin-top:3px;word-break:break-all}
+a.toggle{color:#0f6b5c;font-size:12px;cursor:pointer;text-decoration:underline}
+#notes{display:none;margin-top:6px;padding:10px 12px;background:#fbfcfb;border:1px solid #c9d3cf;font-size:12px;line-height:1.7}
+#notes b{color:#0f6b5c}
+#notes code{background:#eef1ee;padding:0 4px;font-family:Consolas,monospace}
+#notes p{margin:6px 0 2px}
+button{margin:18px 8px 0 0;padding:8px 22px;font:inherit;font-weight:bold;color:#fff;background:#0f6b5c;border:0;cursor:pointer}
+button.alt{background:#fff;color:#0f6b5c;border:1px solid #0f6b5c}
+button[disabled]{opacity:.45;cursor:default}
+#msg{margin-top:14px;font-size:13px;white-space:pre-wrap;word-break:break-all}
+#msg.ok{color:#0f6b5c} #msg.err{color:#b3361f}
+</style>
+</head>
+<body>
+<h1>ffmpeg 转换</h1>
+<p id="ver">正在检测 ffmpeg…</p>
+
+<div class="row"><label for="src">源文件</label><input id="src" type="file">
+  <div class="hint" id="info"></div></div>
+
+<div class="row"><label for="fmt">输出格式</label><select id="fmt"></select></div>
+
+<div class="row" id="opts">
+  <div class="cols">
+    <div id="cRes"><label for="res">分辨率(宽x高)</label><select id="res"></select>
+      <input id="cres" type="text" placeholder="例如 1000x562" style="margin-top:4px;display:none"></div>
+    <div id="cVbr"><label for="vbr">视频码率 / 画质</label><select id="vbr"></select></div>
+    <div id="cAbr"><label for="abr">音频码率</label><select id="abr"></select></div>
+  </div>
+  <div class="hint" id="optHint"></div>
+</div>
+
+<div class="row"><label for="name">保存的文件名</label>
+  <div class="flex"><input id="name" type="text"><span class="ext" id="ext"></span></div></div>
+
+<div class="row"><label for="dir">保存到文件夹</label>
+  <div class="flex"><input id="dir" type="text" readonly placeholder="与源文件相同">
+  <button id="browse" class="alt">浏览…</button><button id="reset" class="alt">同源文件夹</button></div></div>
+
+<div class="row"><label for="from">截取范围(秒,或 分:秒、时:分:秒)</label>
+  <div class="flex"><input id="from" type="text" value="0"><span class="sep">到</span><input id="to" type="text" placeholder="全部"></div></div>
+
+<div class="row"><label for="args">转换参数(由上面的选项自动生成,一般不用改)</label>
+  <div class="flex"><input id="args" type="text"><button id="restore" class="alt">恢复预设</button></div>
+  <div class="hint">切换格式或调整上面的下拉框,会重新生成这里的参数。<a class="toggle" id="tg">参数怎么改?点开查看说明</a></div>
+  <div id="notes">
+    <b>修改前请注意</b>
+    <p>1. 分辨率和码率直接用上面的下拉框选即可,不用手写。手动改过这里后,再动下拉框会被重新覆盖。</p>
+    <p>2. 这里的参数会完整替换预设,不是追加。改坏了点「恢复预设」即可。</p>
+    <p>3. 参数要和输出格式匹配,例如输出 mp3 时不要写视频参数,否则会转换失败。</p>
+    <p>4. 文件名、保存位置、起止时间在上面单独填写,不要写进这里。</p>
+    <p><b>音频常用</b></p>
+    <p><code>-vn</code> 去掉视频画面,只保留声音 &nbsp; <code>-an</code> 去掉声音</p>
+    <p><code>-c:a libmp3lame</code> MP3 编码器 &nbsp; <code>-c:a aac</code> AAC 编码器</p>
+    <p><code>-q:a 2</code> MP3 音质等级 0~9,数字越小越好,2 约 190 kbps</p>
+    <p><code>-b:a 192k</code> 固定音频码率,数字越大音质越高、文件越大</p>
+    <p><code>-af volume=2</code> 音量加倍(0.5 为减半)</p>
+    <p><code>-ar 44100</code> 采样率 &nbsp; <code>-ac 1</code> 单声道</p>
+    <p><b>视频常用</b></p>
+    <p><code>-c:v libx264</code> H.264 编码,兼容性最好</p>
+    <p><code>-crf 23</code> 画质,数字越小画质越高、文件越大,常用 18~28(webm 用 24~40)</p>
+    <p><code>-b:v 2000k</code> 固定视频码率,文件大小可预估</p>
+    <p><code>-preset medium</code> 编码速度:ultrafast 最快但体积大,veryslow 最慢但体积小</p>
+    <p><code>-vf scale=1280:720</code> 缩放到指定宽高;宽或高写 -2 表示按比例自动计算</p>
+    <p><code>-r 30</code> 输出帧率 30 &nbsp; <code>-pix_fmt yuv420p</code> 兼容更多播放器</p>
+    <p><code>-movflags +faststart</code> mp4 适合网页边下边播</p>
+    <p><code>-c copy</code> 不重新编码,速度最快且无损;截取时起点会对齐到附近关键帧</p>
+  </div>
+</div>
+
+<button id="go">开始转换</button><button id="stop" class="alt" disabled>停止</button><button id="open" class="alt" disabled>打开所在文件夹</button>
+<div id="msg"></div>
+
+<script>
+var sh = new ActiveXObject("WScript.Shell");
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var tmp = fso.GetSpecialFolder(2);
+var logF = tmp + "\\ffconv.log", doneF = tmp + "\\ffconv.done", verF = tmp + "\\ffver.txt", probeF = tmp + "\\ffprobe.txt";
+var timer = null, started = 0, outPath = "", duration = 0, ffCmd = "", nameEdited = false;
+
+// 格式类型:a 音频(有损) l 音频(无损) v 视频 g 动图
+var KIND = {mp3:"a", m4a:"a", ogg:"a", wav:"l", flac:"l", mp4:"v", mkv:"v", webm:"v", gif:"g"};
+var AUDIO_DEF = {mp3:"VBR 约 190 kbps", m4a:"192 kbps", ogg:"质量 5 约 160 kbps", mp4:"128 kbps", mkv:"128 kbps", webm:"128 kbps"};
+var CRF = {x264:{hi:18, mid:23, lo:28}, vp9:{hi:24, mid:32, lo:40}};
+var VIDEO_DEF = {mp4:"crf-mid", webm:"crf-mid", mkv:"copy"};
+var RES = [["", "保持原分辨率"], ["3840x2160", "3840x2160(4K)"], ["2560x1440", "2560x1440(2K)"],
+  ["1920x1080", "1920x1080(1080p)"], ["1280x720", "1280x720(720p)"], ["854x480", "854x480(480p)"],
+  ["640x360", "640x360(360p)"], ["custom", "自定义…"]];
+var VBR = [["copy", "不重新编码(直接复制,最快)"], ["crf-hi", "高画质(文件较大)"], ["crf-mid", "标准画质(推荐)"],
+  ["crf-lo", "小体积(画质较低)"], ["8000", "固定 8000 kbps(高清)"], ["4000", "固定 4000 kbps(720p 清晰)"],
+  ["2000", "固定 2000 kbps"], ["1000", "固定 1000 kbps"], ["500", "固定 500 kbps(很小)"]];
+var ABR = ["64k", "96k", "128k", "160k", "192k", "256k", "320k"];
+
+function $(id){ return document.getElementById(id); }
+function q(s){ return '"' + s + '"'; }
+function trim(s){ return s.replace(/^\s+|\s+$/g, ""); }
+function read(p){ var f = fso.OpenTextFile(p, 1), t = f.AtEndOfStream ? "" : f.ReadAll(); f.Close(); return t; }
+function msg(t, c){ $("msg").innerText = t; $("msg").className = c || ""; }
+function pad(n){ return (n < 10 ? "0" : "") + n; }
+function fmtT(s){ s = Math.round(s); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ":" + pad(m) : m) + ":" + pad(s % 60); }
+function fill(sel, items, selected){
+  var i, h = "", v, l;
+  for (i = 0; i < items.length; i++) { v = items[i][0]; l = items[i][1]; h += '<option value="' + v + '"' + (v === selected ? " selected" : "") + ">" + l + "</option>"; }
+  sel.innerHTML = h;
+}
+function parseT(s){
+  s = trim(s); if (!s) return null;
+  if (!/^\d+(:\d+){0,2}(\.\d+)?$/.test(s)) return NaN;
+  var p = s.split(":"), t = 0, i;
+  for (i = 0; i < p.length; i++) t = t * 60 + parseFloat(p[i]);
+  return t;
+}
+
+/* ---------- 分辨率 / 码率下拉框 → 生成 ffmpeg 参数 ---------- */
+function getRes(){   // 返回 null=不缩放, false=自定义格式错误, {w,h}
+  var v = $("res").value, m;
+  if (!v) return null;
+  if (v === "custom") {
+    m = /^(\d{2,5})\s*[xX\u00d7*]\s*(\d{2,5})$/.exec(trim($("cres").value));
+    return m ? {w: m[1], h: m[2]} : false;
+  }
+  m = v.split("x"); return {w: m[0], h: m[1]};
+}
+function scaleStr(r, extra){ return "scale=" + r.w + ":" + r.h + ":force_original_aspect_ratio=decrease" + extra; }
+
+function audioArgs(f, a){
+  var ab = $("abr").value, auto = ab === "auto";
+  if (f === "mp3") a.push("-c:a libmp3lame", auto ? "-q:a 2" : "-b:a " + ab);
+  else if (f === "ogg") a.push("-c:a libvorbis", auto ? "-q:a 5" : "-b:a " + ab);
+  else if (f === "m4a") a.push("-c:a aac", "-b:a " + (auto ? "192k" : ab));
+  else if (f === "webm") a.push("-c:a libopus", "-b:a " + (auto ? "128k" : ab));
+  else a.push("-c:a aac", "-b:a " + (auto ? "128k" : ab));   // mp4 / mkv
+}
+
+function build(){
+  var f = $("fmt").value, kind = KIND[f], a = [], vbr = $("vbr").value, res = getRes(), n;
+  if (kind === "l") { a.push("-vn", f === "wav" ? "-c:a pcm_s16le" : "-c:a flac"); }
+  else if (kind === "a") { a.push("-vn"); audioArgs(f, a); }
+  else if (kind === "g") { a.push("-vf fps=12" + (res ? "," + scaleStr(res, ":flags=lanczos") : ""), "-loop 0"); }
+  else if (vbr === "copy") { a.push("-c copy"); }
+  else {
+    a.push("-c:v " + (f === "webm" ? "libvpx-vp9" : "libx264"));
+    if (f !== "webm") a.push("-preset medium");
+    if (vbr.indexOf("crf-") === 0) {
+      n = CRF[f === "webm" ? "vp9" : "x264"][vbr.substr(4)];
+      a.push("-crf " + n); if (f === "webm") a.push("-b:v 0");
+    } else a.push("-b:v " + vbr + "k");
+    if (res) a.push("-vf " + scaleStr(res, ":force_divisible_by=2"));
+    if (f === "mp4") a.push("-pix_fmt yuv420p");
+    audioArgs(f, a);
+    if (f === "mp4") a.push("-movflags +faststart");
+  }
+  $("args").value = a.join(" ");
+}
+
+// 按格式显示/隐藏、启用/禁用下拉框
+function layout(){
+  var f = $("fmt").value, kind = KIND[f], copy = kind === "v" && $("vbr").value === "copy", hint = "";
+  $("cRes").style.display = (kind === "v" || kind === "g") ? "" : "none";
+  $("cVbr").style.display = kind === "v" ? "" : "none";
+  $("cAbr").style.display = (kind === "a" || kind === "v") ? "" : "none";
+  $("opts").style.display = kind === "l" ? "none" : "";
+  $("res").disabled = copy; $("abr").disabled = copy;
+  $("cres").style.display = ($("res").value === "custom" && !copy) ? "" : "none";
+  if (kind === "l") hint = "";
+  else if (copy) hint = "直接复制不重新编码,速度最快、画质无损;此时不能改分辨率和音频码率。";
+  else if (kind === "v" || kind === "g") hint = "分辨率按比例缩放到不超过所选尺寸,竖屏视频也不会变形。码率越高画质越好、文件越大。";
+  else hint = "码率越高音质越好、文件越大。";
+  $("optHint").innerText = hint;
+  if (kind === "l") $("optHint").innerText = "";
+}
+
+function autoName(){
+  var src = $("src").value;
+  if (!src || nameEdited) return;
+  var same = fso.GetExtensionName(src).toLowerCase() === $("fmt").value;
+  $("name").value = fso.GetBaseName(src) + (same ? "_转换" : "");
+}
+
+// 切换格式:重置下拉框为该格式的默认值
+function setup(){
+  var f = $("fmt").value, kind = KIND[f], vitems = VBR.slice(0), aitems = [["auto", "默认(" + (AUDIO_DEF[f] || "") + ")"]], i;
+  if (f === "webm") vitems = vitems.slice(1);
+  for (i = 0; i < ABR.length; i++) aitems.push([ABR[i], ABR[i].replace("k", " kbps")]);
+  fill($("res"), RES, kind === "g" ? "640x360" : "");
+  fill($("vbr"), vitems, VIDEO_DEF[f] || "crf-mid");
+  fill($("abr"), aitems, "auto");
+  $("ext").innerText = "." + f;
+  layout(); build(); autoName();
+}
+
+var fmts = "", k;
+for (k in KIND) fmts += "<option>" + k + "</option>";
+$("fmt").innerHTML = fmts;
+$("fmt").onchange = setup;
+$("restore").onclick = setup;
+$("res").onchange = $("vbr").onchange = $("abr").onchange = function(){ layout(); build(); };
+$("cres").onkeyup = build;
+$("name").oninput = function(){ nameEdited = true; };
+setup();
+
+$("tg").onclick = function(){
+  var n = $("notes"), open = n.style.display === "block";
+  n.style.display = open ? "none" : "block";
+  $("tg").innerText = open ? "参数怎么改?点开查看说明" : "收起说明";
+};
+
+/* ---------- 查找 ffmpeg:先找本文件所在文件夹,再找 PATH ---------- */
+function hereDir(){
+  var p = "", m;
+  try { p = decodeURIComponent(location.pathname).replace(/\//g, "\\").replace(/^\\([A-Za-z]:)/, "$1"); } catch (e) {}
+  if (!p || !fso.FileExists(p)) {
+    m = /"([^"]+\.hta)"/i.exec(app.commandLine) || /(\S+\.hta)/i.exec(app.commandLine);
+    p = m ? m[1] : "";
+  }
+  return p ? fso.GetParentFolderName(p) : "";
+}
+function tryFF(exe, label){
+  if (fso.FileExists(verF)) fso.DeleteFile(verF);
+  sh.Run('cmd /c "' + exe + ' -version > ' + q(verF) + ' 2>&1"', 0, true);
+  var v = fso.FileExists(verF) ? trim(read(verF).split("\n")[0]) : "";
+  if (v.indexOf("ffmpeg version") !== 0) return false;
+  ffCmd = exe;
+  $("ver").innerText = v + "(来源:" + label + ")";
+  return true;
+}
+(function(){
+  window.resizeTo(620, 900);
+  var d = hereDir(), found = false;
+  if (d) {
+    found = (fso.FileExists(d + "\\ffmpeg.exe") && tryFF(q(d + "\\ffmpeg.exe"), "本文件所在文件夹")) ||
+            (fso.FileExists(d + "\\bin\\ffmpeg.exe") && tryFF(q(d + "\\bin\\ffmpeg.exe"), "本文件夹下的 bin 目录"));
+  }
+  if (!found) found = tryFF("ffmpeg", "系统 PATH 环境变量");
+  if (!found) {
+    $("ver").innerText = "未找到 ffmpeg。请把 ffmpeg.exe 放到本文件所在文件夹,或将 ffmpeg 加入 PATH 环境变量,然后重新打开。";
+    $("ver").className = "bad";
+    $("go").disabled = true;
+  }
+})();
+
+/* ---------- 选择文件:读取时长、分辨率、码率 ---------- */
+$("src").onchange = function(){
+  var src = $("src").value;
+  if (!src || !fso.FileExists(src) || !ffCmd) return;
+  nameEdited = false; autoName();
+  $("to").value = ""; duration = 0; $("info").innerText = "正在读取文件信息…";
+  if (fso.FileExists(probeF)) fso.DeleteFile(probeF);
+  sh.Run('cmd /c "' + ffCmd + ' -hide_banner -i ' + q(src) + ' 2> ' + q(probeF) + '"', 0, true);
+  var t = fso.FileExists(probeF) ? read(probeF) : "";
+  var m = t.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/), r = /Video:[^\r\n]*?[ ,](\d{3,5})x(\d{3,5})[ ,\[]/.exec(t), b = /bitrate:\s*(\d+)\s*kb\/s/.exec(t), info = [];
+  if (m) {
+    duration = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+    info.push("时长 " + fmtT(duration) + "(" + duration.toFixed(1) + " 秒)");
+    $("to").placeholder = "全部(" + fmtT(duration) + ")";
+  } else $("to").placeholder = "全部";
+  if (r) info.push("分辨率 " + r[1] + "x" + r[2]);
+  if (b) info.push("总码率 " + b[1] + " kbps");
+  $("info").innerText = info.length ? info.join(",") : "未能读取文件信息(文件可能不是音视频)";
+};
+
+$("browse").onclick = function(){
+  var f = new ActiveXObject("Shell.Application").BrowseForFolder(0, "选择保存文件夹", 0x51, 0);
+  if (f) $("dir").value = f.Self.Path;
+};
+$("reset").onclick = function(){ $("dir").value = ""; };
+
+function setBusy(b){ $("go").disabled = b; $("stop").disabled = !b; }
+
+/* ---------- 转换 ---------- */
+$("go").onclick = function(){
+  var src = $("src").value;
+  if (!src || !fso.FileExists(src)) { msg("请先选择源文件", "err"); return; }
+
+  var name = trim($("name").value);
+  if (!name) { msg("请填写保存的文件名", "err"); return; }
+  if (/[\\\/:*?"<>|]/.test(name)) { msg('文件名不能包含 \\ / : * ? " < > |', "err"); return; }
+
+  if ($("cres").style.display !== "none" && getRes() === false) { msg("自定义分辨率格式不对,请填写如 1000x562", "err"); return; }
+
+  var t0 = parseT($("from").value), t1 = parseT($("to").value);
+  if (t0 !== t0 || t1 !== t1) { msg("时间格式不对,可填 90、1:30 或 01:02:03.5", "err"); return; }
+  if (t0 === null) t0 = 0;
+  if (t1 !== null && t1 <= t0) { msg("结束时间必须大于开始时间", "err"); return; }
+  if (duration && t0 >= duration) { msg("开始时间超过了文件时长(" + fmtT(duration) + ")", "err"); return; }
+
+  var fmt = $("fmt").value;
+  var args = trim($("args").value);
+  if (!args) { build(); args = $("args").value; }
+  var dir = $("dir").value || fso.GetParentFolderName(src);
+  outPath = dir.replace(/\\$/, "") + "\\" + name + "." + fmt;
+  if (outPath.toLowerCase() === src.toLowerCase()) { msg("输出文件不能和源文件相同,请改一个文件名或文件夹", "err"); return; }
+  if (fso.FileExists(outPath) && !confirm("文件已存在:\n" + outPath + "\n\n要覆盖吗?")) return;
+
+  if (fso.FileExists(logF)) fso.DeleteFile(logF);
+  if (fso.FileExists(doneF)) fso.DeleteFile(doneF);
+
+  var trimArgs = t0 > 0 ? " -ss " + t0 : "";          // -ss 放在 -i 前面速度更快
+  var tail = t1 === null ? "" : " -t " + (t1 - t0);    // -t 为截取时长
+
+  var cmd = 'cmd /c "' + ffCmd + ' -y -hide_banner' + trimArgs + ' -i ' + q(src) + tail + ' ' + args + ' ' + q(outPath) +
+            ' 2>' + q(logF) + ' && echo ok>' + q(doneF) + ' || echo fail>' + q(doneF) + '"';
+  sh.Run(cmd, 0, false);
+  started = new Date().getTime();
+  setBusy(true); $("open").disabled = true;
+  timer = setInterval(poll, 500);
+};
+
+function poll(){
+  var sec = Math.floor((new Date().getTime() - started) / 1000);
+  if (!fso.FileExists(doneF)) { msg("转换中… 已用 " + sec + " 秒"); return; }
+  clearInterval(timer); setBusy(false);
+  if (read(doneF).indexOf("ok") >= 0) { msg("完成(用时 " + sec + " 秒)\n" + outPath, "ok"); $("open").disabled = false; }
+  else {
+    var log = fso.FileExists(logF) ? read(logF) : "";
+    msg("转换失败\n" + log.slice(-1200), "err");
+  }
+}
+
+$("stop").onclick = function(){
+  clearInterval(timer);
+  sh.Run("taskkill /im ffmpeg.exe /f", 0, true);
+  setBusy(false); msg("已停止", "err");
+};
+
+$("open").onclick = function(){ sh.Run('explorer /select,' + q(outPath), 1, false); };
+</script>
+</body>
+</html>
