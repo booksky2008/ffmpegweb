@@ -90,12 +90,13 @@ footer{color:var(--muted);font-size:.75rem;margin-top:12px}
 <footer>转换在你的浏览器里完成,文件不会上传到服务器。转换期间请保持屏幕亮起、不要切换页面。</footer>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="lib/ffmpeg.min.js"></script>
 <script>
 /* ===== 可调整的配置 ===== */
 const MAX_MB = 200;                       // 源文件大小上限(MB),超过则不允许选择
 // 单线程内核(core-st):不需要 SharedArrayBuffer,可在 GitHub Pages 这类普通静态站点运行
-const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js';
+// 内核文件放在同站点的 lib 文件夹里,不依赖外部 CDN
+const CORE = new URL('lib/ffmpeg-core.js', document.location).href;
 
 const $ = s => document.querySelector(s);
 const KIND = {mp3:'a', m4a:'a', ogg:'a', wav:'l', flac:'l', mp4:'v', mkv:'v', webm:'v', gif:'g'}; // a有损音频 l无损音频 v视频 g动图
