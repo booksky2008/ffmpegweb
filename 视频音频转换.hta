@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="x-ua-compatible" content="ie=edge">
-<title>ffmpeg 转换</title>
-<hta:application id="app" applicationname="ffmpeg转换" border="thin" caption="yes" scroll="auto" singleinstance="yes" maximizebutton="no" />
+<title>视频 &lt;-&gt; 音频转换</title>
+<hta:application id="app" applicationname="视频音频转换" border="thin" caption="yes" scroll="auto" singleinstance="yes" maximizebutton="no" />
 <style>
-body{margin:0;padding:22px 26px;background:#eef1ee;color:#1c2b27;font:14px/1.6 "Microsoft YaHei",sans-serif}
-h1{font-size:20px;margin:0 0 2px}
-#ver{color:#5d6f69;font-size:12px;margin:0 0 6px;word-break:break-all}
+body{margin:0;padding:0;background:#eef1ee;color:#1c2b27;font:14px/1.6 "Microsoft YaHei",sans-serif}
+#wrap{padding:16px 26px 14px}
+h1{font-size:20px;margin:0 0 4px}
+#ver{color:#5d6f69;font-size:12px;font-weight:normal;margin-left:10px}
 #ver.bad{color:#b3361f}
-.row{margin-top:12px}
+.row{margin-top:10px}
 label{display:block;color:#5d6f69;font-size:12px;margin-bottom:3px}
 select,input[type=text],input[type=file]{width:100%;padding:6px 8px;font:inherit;border:1px solid #c9d3cf;background:#fff;box-sizing:border-box}
 select[disabled]{background:#e4e9e6;color:#8a9a94}
@@ -22,27 +23,32 @@ select[disabled]{background:#e4e9e6;color:#8a9a94}
 .cols{display:flex}
 .cols>div{flex:1;min-width:0;margin-right:10px}
 .cols>div:last-child{margin-right:0}
+.cols>.c1{flex:0 0 150px}
 .hint{font-size:11px;color:#5d6f69;margin-top:3px;word-break:break-all}
 a.toggle{color:#0f6b5c;font-size:12px;cursor:pointer;text-decoration:underline}
 #notes{display:none;margin-top:6px;padding:10px 12px;background:#fbfcfb;border:1px solid #c9d3cf;font-size:12px;line-height:1.7}
 #notes b{color:#0f6b5c}
 #notes code{background:#eef1ee;padding:0 4px;font-family:Consolas,monospace}
 #notes p{margin:6px 0 2px}
-button{margin:18px 8px 0 0;padding:8px 22px;font:inherit;font-weight:bold;color:#fff;background:#0f6b5c;border:0;cursor:pointer}
+button{margin:14px 8px 0 0;padding:8px 22px;font:inherit;font-weight:bold;color:#fff;background:#0f6b5c;border:0;cursor:pointer}
 button.alt{background:#fff;color:#0f6b5c;border:1px solid #0f6b5c}
 button[disabled]{opacity:.45;cursor:default}
-#msg{margin-top:14px;font-size:13px;white-space:pre-wrap;word-break:break-all}
+#msg{display:none;margin-top:10px;font-size:13px;white-space:pre-wrap;word-break:break-all}
 #msg.ok{color:#0f6b5c} #msg.err{color:#b3361f}
 </style>
 </head>
 <body>
-<h1>ffmpeg 转换</h1>
-<p id="ver">正在检测 ffmpeg…</p>
+<div id="wrap">
+<h1>视频 &lt;-&gt; 音频转换<span id="ver">检测中…</span></h1>
 
 <div class="row"><label for="src">源文件</label><input id="src" type="file">
   <div class="hint" id="info"></div></div>
 
-<div class="row"><label for="fmt">输出格式</label><select id="fmt"></select></div>
+<div class="row cols">
+  <div class="c1"><label for="fmt">输出格式</label><select id="fmt"></select></div>
+  <div class="c2"><label for="from">截取范围(秒 / 分:秒 / 时:分:秒)</label>
+    <div class="flex"><input id="from" type="text" value="0"><span class="sep">到</span><input id="to" type="text" placeholder="全部"></div></div>
+</div>
 
 <div class="row" id="opts">
   <div class="cols">
@@ -60,9 +66,6 @@ button[disabled]{opacity:.45;cursor:default}
 <div class="row"><label for="dir">保存到文件夹</label>
   <div class="flex"><input id="dir" type="text" readonly placeholder="与源文件相同">
   <button id="browse" class="alt">浏览…</button><button id="reset" class="alt">同源文件夹</button></div></div>
-
-<div class="row"><label for="from">截取范围(秒,或 分:秒、时:分:秒)</label>
-  <div class="flex"><input id="from" type="text" value="0"><span class="sep">到</span><input id="to" type="text" placeholder="全部"></div></div>
 
 <div class="row"><label for="args">转换参数(由上面的选项自动生成,一般不用改)</label>
   <div class="flex"><input id="args" type="text"><button id="restore" class="alt">恢复预设</button></div>
@@ -94,6 +97,7 @@ button[disabled]{opacity:.45;cursor:default}
 
 <button id="go">开始转换</button><button id="stop" class="alt" disabled>停止</button><button id="open" class="alt" disabled>打开所在文件夹</button>
 <div id="msg"></div>
+</div>
 
 <script>
 var sh = new ActiveXObject("WScript.Shell");
@@ -119,7 +123,7 @@ function $(id){ return document.getElementById(id); }
 function q(s){ return '"' + s + '"'; }
 function trim(s){ return s.replace(/^\s+|\s+$/g, ""); }
 function read(p){ var f = fso.OpenTextFile(p, 1), t = f.AtEndOfStream ? "" : f.ReadAll(); f.Close(); return t; }
-function msg(t, c){ $("msg").innerText = t; $("msg").className = c || ""; }
+function msg(t, c){ $("msg").innerText = t; $("msg").className = c || ""; $("msg").style.display = t ? "block" : "none"; fit(); }
 function pad(n){ return (n < 10 ? "0" : "") + n; }
 function fmtT(s){ s = Math.round(s); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ":" + pad(m) : m) + ":" + pad(s % 60); }
 function fill(sel, items, selected){
@@ -192,6 +196,7 @@ function layout(){
   else hint = "码率越高音质越好、文件越大。";
   $("optHint").innerText = hint;
   if (kind === "l") $("optHint").innerText = "";
+  fit();
 }
 
 function autoName(){
@@ -227,6 +232,7 @@ $("tg").onclick = function(){
   var n = $("notes"), open = n.style.display === "block";
   n.style.display = open ? "none" : "block";
   $("tg").innerText = open ? "参数怎么改?点开查看说明" : "收起说明";
+  fit();
 };
 
 /* ---------- 查找 ffmpeg:先找本文件所在文件夹,再找 PATH ---------- */
@@ -245,20 +251,23 @@ function tryFF(exe, label){
   var v = fso.FileExists(verF) ? trim(read(verF).split("\n")[0]) : "";
   if (v.indexOf("ffmpeg version") !== 0) return false;
   ffCmd = exe;
-  $("ver").innerText = v + "(来源:" + label + ")";
+  var tok = (/version\s+(\S+)/.exec(v) || [0, ""])[1];
+  if (/^\d/.test(tok)) tok = tok.split("-")[0];
+  $("ver").innerText = "v" + tok + " (" + label + ")";
   return true;
 }
 (function(){
-  window.resizeTo(620, 900);
+  window.resizeTo(620, 700);
   var d = hereDir(), found = false;
   if (d) {
-    found = (fso.FileExists(d + "\\ffmpeg.exe") && tryFF(q(d + "\\ffmpeg.exe"), "本文件所在文件夹")) ||
-            (fso.FileExists(d + "\\bin\\ffmpeg.exe") && tryFF(q(d + "\\bin\\ffmpeg.exe"), "本文件夹下的 bin 目录"));
+    found = (fso.FileExists(d + "\\ffmpeg.exe") && tryFF(q(d + "\\ffmpeg.exe"), "local")) ||
+            (fso.FileExists(d + "\\bin\\ffmpeg.exe") && tryFF(q(d + "\\bin\\ffmpeg.exe"), "local"));
   }
-  if (!found) found = tryFF("ffmpeg", "系统 PATH 环境变量");
+  if (!found) found = tryFF("ffmpeg", "env");
   if (!found) {
-    $("ver").innerText = "未找到 ffmpeg。请把 ffmpeg.exe 放到本文件所在文件夹,或将 ffmpeg 加入 PATH 环境变量,然后重新打开。";
+    $("ver").innerText = "(未找到转换组件)";
     $("ver").className = "bad";
+    msg("未找到转换组件:请把 ffmpeg.exe 放到本程序所在文件夹,或将其加入 PATH 环境变量,然后重新打开。", "err");
     $("go").disabled = true;
   }
 })();
@@ -281,6 +290,7 @@ $("src").onchange = function(){
   if (r) info.push("分辨率 " + r[1] + "x" + r[2]);
   if (b) info.push("总码率 " + b[1] + " kbps");
   $("info").innerText = info.length ? info.join(",") : "未能读取文件信息(文件可能不是音视频)";
+  fit();
 };
 
 $("browse").onclick = function(){
@@ -348,6 +358,18 @@ $("stop").onclick = function(){
 };
 
 $("open").onclick = function(){ sh.Run('explorer /select,' + q(outPath), 1, false); };
+
+/* ---------- 窗口:按内容高度自适应,并在屏幕居中 ---------- */
+function fit(center){
+  var w = $("wrap"), vh = document.documentElement.clientHeight, delta = w.offsetHeight - vh,
+      ow = window.outerWidth || 620, oh = window.outerHeight || (vh + 40), maxH = screen.availHeight - 10, nh;
+  if (!center && Math.abs(delta) < 3) return;
+  nh = Math.max(300, Math.min(oh + delta, maxH));
+  window.resizeTo(ow, nh);
+  if (center) window.moveTo(Math.max(0, Math.round((screen.availWidth - ow) / 2)), Math.max(0, Math.round((screen.availHeight - nh) / 2)));
+}
+fit(true);
+setTimeout(function(){ fit(true); }, 150);
 </script>
 </body>
 </html>
