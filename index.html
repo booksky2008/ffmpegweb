@@ -94,7 +94,8 @@ footer{color:var(--muted);font-size:.75rem;margin-top:12px}
 <script>
 /* ===== 可调整的配置 ===== */
 const MAX_MB = 200;                       // 源文件大小上限(MB),超过则不允许选择
-const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
+// 单线程内核(core-st):不需要 SharedArrayBuffer,可在 GitHub Pages 这类普通静态站点运行
+const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js';
 
 const $ = s => document.querySelector(s);
 const KIND = {mp3:'a', m4a:'a', ogg:'a', wav:'l', flac:'l', mp4:'v', mkv:'v', webm:'v', gif:'g'}; // a有损音频 l无损音频 v视频 g动图
@@ -249,7 +250,7 @@ $('#go').onclick = async () => {
   try {
     if (!ff) {
       status('正在加载转换内核(首次约 25 MB,之后有缓存)…');
-      ff = FFmpeg.createFFmpeg({corePath: CORE});
+      ff = FFmpeg.createFFmpeg({corePath: CORE, mainName: 'main'});
       ff.setLogger(({message}) => { logs.push(message); if (logs.length > 30) logs.shift(); });
       await ff.load();
       $('#ver').textContent = 'wasm';
@@ -268,7 +269,7 @@ $('#go').onclick = async () => {
     status(`完成(用时 ${Math.floor((Date.now() - t) / 1000)} 秒),大小 ${mb(blob.size)} MB。点下面的按钮保存。`, 'ok');
   } catch (e) {
     const tail = logs.slice(-8).join('\n');
-    status(cancelled ? '已取消' : '转换失败\n' + tail, cancelled ? '' : 'err');
+    status(cancelled ? '已取消' : '转换失败\n' + (e && e.message ? e.message + '\n' : '') + tail, cancelled ? '' : 'err');
     resetCore();
   } finally {
     clearInterval(timer); setBusy(false); $('#go').disabled = !file;
