@@ -38,10 +38,31 @@ progress{width:100%;height:8px;margin-top:14px;accent-color:var(--accent)}
 #status{margin-top:10px;font-size:.9rem;white-space:pre-wrap;word-break:break-all}
 #status.ok{color:var(--ok)}#status.err{color:var(--err)}
 [hidden]{display:none!important}
+.spin{display:inline-block;width:14px;height:14px;margin-left:8px;vertical-align:-2px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+#gate{position:fixed;inset:0;z-index:99;background:var(--bg);overflow:auto;padding:calc(24px + env(safe-area-inset-top)) 20px 24px}
+.gbox{max-width:420px;margin:10vh auto 0}
+.gbox h2{font-size:1.3rem;margin:0 0 8px}
+.gbox ol{padding-left:1.3em;margin:10px 0}
+.gbox input{margin-top:12px;font-size:.85rem}
+.gbox a{display:block;margin-top:18px;color:var(--muted);font-size:.85rem}
+#garrow{position:fixed;top:calc(8px + env(safe-area-inset-top));right:16px;color:var(--accent);font-weight:600;text-align:right}
 footer{color:var(--muted);font-size:.75rem;margin-top:12px}
 </style>
 </head>
 <body>
+<div id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gt">
+  <div id="garrow" hidden>点右上角「···」 ↗</div>
+  <div class="gbox">
+    <h2 id="gt">请在浏览器中打开</h2>
+    <p id="gmsg"></p>
+    <ol id="gsteps"></ol>
+    <input id="gurl" type="text" readonly aria-label="本页链接">
+    <button id="gopen" hidden>选择浏览器打开</button><button id="gcopy" class="alt">复制链接</button>
+    <a id="gskip" href="#">仍在此处继续(可能无法转换或保存)</a>
+  </div>
+</div>
 <main>
 <h1>视频 &lt;-&gt; 音频转换<small id="ver">未加载</small></h1>
 
@@ -84,7 +105,7 @@ footer{color:var(--muted);font-size:.75rem;margin-top:12px}
 
   <button id="go" disabled>开始转换</button><button id="stop" class="alt" hidden>取消</button>
   <progress id="bar" max="1" value="0" hidden></progress>
-  <div id="status"></div>
+  <div id="status" role="status"><span id="stxt"></span><i class="spin" id="spin" hidden></i></div>
   <div id="result" hidden><a id="dl" class="btn" download>保存到手机</a></div>
 </div>
 <footer>转换在你的浏览器里完成,文件不会上传到服务器。转换期间请保持屏幕亮起、不要切换页面。</footer>
@@ -99,6 +120,49 @@ const MAX_MB = 200;                       // 源文件大小上限(MB),超过则
 const CORE = new URL('lib/ffmpeg-core.js', document.location).href;
 
 const $ = s => document.querySelector(s);
+
+/* ---------- 检测是否在系统浏览器中打开 ---------- */
+(function(){
+  const ua = navigator.userAgent;
+  const APPS = [[/MicroMessenger/i, '微信'], [/\bQQ\//, 'QQ'], [/Weibo/i, '微博'], [/AlipayClient/i, '支付宝'], [/DingTalk/i, '钉钉'],
+    [/aweme|BytedanceWebview|musical_ly/i, '抖音'], [/Lark|Feishu/i, '飞书'], [/xhsdiscover/i, '小红书'], [/baiduboxapp/i, '百度'],
+    [/AliApp\(TB/i, '淘宝'], [/FBAN|FBAV/, 'Facebook'], [/Instagram/i, 'Instagram'], [/\bLine\//, 'LINE']];
+  let app = (APPS.find(([r]) => r.test(ua)) || [])[1] || '';
+  // 其他应用内置的网页容器:安卓 WebView 带 "; wv)",iOS 的 WKWebView 没有 "Safari/"
+  if (!app && (/; wv\)/.test(ua) || (/iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua)))) app = '当前应用';
+  const noWasm = typeof WebAssembly === 'undefined';
+  if (!app && !noWasm) return;
+
+  $('#gate').hidden = false;
+  $('#gurl').value = location.href;
+  const steps = ['点右上角的「···」或分享菜单', '选择「在浏览器打开」(iPhone 上是「在 Safari 中打开」)', '或点下面的「复制链接」,到浏览器里粘贴打开'];
+  if (app) {
+    $('#gmsg').textContent = `你正在「${app}」里打开本页,它的内置浏览器常常无法完成转换或保存文件,请用系统浏览器(Chrome、Safari、Edge 等)打开。`;
+    $('#gsteps').innerHTML = steps.map(x => `<li>${x}</li>`).join('');
+    $('#garrow').hidden = false;
+  } else {
+    $('#gmsg').textContent = '当前浏览器不支持转换所需的功能,请换用新版 Chrome、Safari 或 Edge 打开。';
+    $('#gskip').hidden = true;
+  }
+  // 安卓:尝试唤起系统的"选择浏览器"(微信、QQ 会拦截,只能用右上角菜单)
+  if (/Android/.test(ua) && !/MicroMessenger|\bQQ\//.test(ua)) {
+    $('#gopen').hidden = false;
+    $('#gopen').onclick = () => {
+      const u = new URL(location.href);
+      location.href = `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.replace(':', '')};action=android.intent.action.VIEW;end`;
+    };
+  }
+  $('#gcopy').onclick = async () => {
+    const ok = () => $('#gcopy').textContent = '已复制,去浏览器粘贴';
+    try { await navigator.clipboard.writeText(location.href); ok(); }
+    catch (e) {
+      $('#gurl').focus(); $('#gurl').select();
+      try { document.execCommand('copy') ? ok() : $('#gcopy').textContent = '请长按上面的链接复制'; }
+      catch (e2) { $('#gcopy').textContent = '请长按上面的链接复制'; }
+    }
+  };
+  $('#gskip').onclick = e => { e.preventDefault(); $('#gate').hidden = true; };
+})();
 const KIND = {mp3:'a', m4a:'a', ogg:'a', wav:'l', flac:'l', mp4:'v', mkv:'v', webm:'v', gif:'g'}; // a有损音频 l无损音频 v视频 g动图
 const AUDIO_DEF = {mp3:'VBR 约 190 kbps', m4a:'192 kbps', ogg:'质量 5 约 160 kbps', mp4:'128 kbps', mkv:'128 kbps', webm:'128 kbps'};
 const CRF = {x264:{hi:18, mid:23, lo:28}, vp9:{hi:24, mid:32, lo:40}};
@@ -112,7 +176,7 @@ const ABR = ['64k', '96k', '128k', '160k', '192k', '256k', '320k'];
 let file = null, duration = 0, ff = null, cancelled = false, nameEdited = false, blobUrl = '', timer = 0, logs = [];
 
 $('#lim').textContent = MAX_MB;
-const status = (t, c = '') => { const s = $('#status'); s.textContent = t; s.className = c; };
+const status = (t, c = '', busy = false) => { $('#stxt').textContent = t; $('#status').className = c; $('#spin').hidden = !busy; };
 const fill = (sel, items, cur) => sel.innerHTML = items.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('');
 const pad = n => String(n).padStart(2, '0');
 const fmtT = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + pad(m) : m) + ':' + pad(s % 60); };
@@ -250,7 +314,7 @@ $('#go').onclick = async () => {
   const t = Date.now(), inName = 'in' + ((file.name.match(/\.[A-Za-z0-9]{1,5}$/) || ['.bin'])[0]), outName = 'out.' + fmt;
   try {
     if (!ff) {
-      status('正在加载转换内核(首次约 25 MB,之后有缓存)…');
+      status('正在加载转换内核(首次约 25 MB,之后有缓存)…', '', true);
       ff = FFmpeg.createFFmpeg({corePath: CORE, mainName: 'main'});
       ff.setLogger(({message}) => { logs.push(message); if (logs.length > 30) logs.shift(); });
       await ff.load();
@@ -258,7 +322,7 @@ $('#go').onclick = async () => {
     }
     $('#bar').removeAttribute('value');
     ff.setProgress(({ratio}) => { if (ratio > 0 && ratio <= 1) $('#bar').value = ratio; });
-    timer = setInterval(() => status(`转换中… 已用 ${Math.floor((Date.now() - t) / 1000)} 秒`), 500);
+    timer = setInterval(() => status(`转换中… 已用 ${Math.floor((Date.now() - t) / 1000)} 秒`, '', true), 500);
     ff.FS('writeFile', inName, await FFmpeg.fetchFile(file));
     await ff.run(...(t0 > 0 ? ['-ss', String(t0)] : []), '-i', inName, ...(t1 === null ? [] : ['-t', String(t1 - t0)]), ...args, outName);
     const data = ff.FS('readFile', outName);
