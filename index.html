@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>视频 &lt;-&gt; 音频转换</title>
+<style>
+:root{--bg:#eef1ee;--panel:#fbfcfb;--ink:#1c2b27;--muted:#5d6f69;--line:#c9d3cf;--accent:#0f6b5c;--accent-ink:#fff;--err:#b3361f;--ok:#0f6b5c;
+--font:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#121a18;--panel:#1a2421;--ink:#e4ece9;--muted:#8fa39c;--line:#2f3d39;--accent:#4cc3aa;--accent-ink:#0d1a16;--err:#ff8a73;--ok:#4cc3aa}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--font);padding:16px}
+main{max-width:640px;margin:0 auto}
+h1{font-size:1.35rem;margin:4px 0 12px}
+h1 small{font-size:.75rem;font-weight:400;color:var(--muted);margin-left:8px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.row{margin-top:14px}
+.row:first-child{margin-top:0}
+label{display:block;color:var(--muted);font-size:.8rem;margin-bottom:4px}
+select,input[type=text]{width:100%;min-height:44px;padding:8px 10px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px}
+select:disabled{opacity:.5}
+input[type=file]{width:100%;font:inherit;color:var(--ink)}
+.two{display:grid;grid-template-columns:130px 1fr;gap:10px}
+.range{display:flex;align-items:center;gap:6px}.range span{color:var(--muted)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.name{display:flex;align-items:center;gap:6px}.name span{color:var(--muted)}
+.hint{font-size:.78rem;color:var(--muted);margin-top:4px;word-break:break-all}
+.hint.warn{color:var(--err)}
+details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;color:var(--accent);font-size:.9rem}
+.notes{font-size:.8rem;color:var(--muted);line-height:1.7;margin-top:8px}
+.notes code{background:var(--bg);padding:0 4px;border-radius:3px}
+button,.btn{display:inline-block;min-height:46px;padding:10px 22px;margin:16px 8px 0 0;font:inherit;font-weight:600;text-align:center;text-decoration:none;color:var(--accent-ink);background:var(--accent);border:0;border-radius:6px;cursor:pointer}
+button.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+:is(select,input,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+progress{width:100%;height:8px;margin-top:14px;accent-color:var(--accent)}
+#status{margin-top:10px;font-size:.9rem;white-space:pre-wrap;word-break:break-all}
+#status.ok{color:var(--ok)}#status.err{color:var(--err)}
+[hidden]{display:none!important}
+footer{color:var(--muted);font-size:.75rem;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>视频 &lt;-&gt; 音频转换<small id="ver">未加载</small></h1>
+
+<div class="panel">
+  <div class="row">
+    <label for="src">源文件(最大 <span id="lim"></span> MB)</label>
+    <input id="src" type="file" accept="video/*,audio/*,.mkv,.flv,.avi,.wmv,.ts">
+    <div class="hint" id="info"></div>
+  </div>
+
+  <div class="row two">
+    <div><label for="fmt">输出格式</label><select id="fmt"></select></div>
+    <div><label for="from">截取范围(秒 / 分:秒 / 时:分:秒)</label>
+      <div class="range"><input id="from" type="text" value="0" inputmode="text"><span>到</span><input id="to" type="text" placeholder="全部" inputmode="text"></div></div>
+  </div>
+
+  <div class="row" id="opts">
+    <div class="opts">
+      <div id="cRes"><label for="res">分辨率(宽x高)</label><select id="res"></select>
+        <input id="cres" type="text" placeholder="如 1000x562" style="margin-top:6px" hidden></div>
+      <div id="cVbr"><label for="vbr">视频码率 / 画质</label><select id="vbr"></select></div>
+      <div id="cAbr"><label for="abr">音频码率</label><select id="abr"></select></div>
+    </div>
+    <div class="hint" id="optHint"></div>
+  </div>
+
+  <div class="row"><label for="name">保存的文件名</label>
+    <div class="name"><input id="name" type="text"><span id="ext"></span></div></div>
+
+  <details>
+    <summary>高级:转换参数(一般不用改)</summary>
+    <div class="row"><input id="args" type="text" aria-label="转换参数"><button id="restore" class="alt" style="margin-top:8px">恢复预设</button></div>
+    <div class="notes">
+      由上面的选项自动生成;手动改过后再动下拉框会被重新覆盖。参数是完整替换,不是追加,且要和输出格式匹配。<br>
+      <code>-vn</code> 去掉画面 <code>-c:a aac</code> AAC 编码 <code>-b:a 192k</code> 音频码率 <code>-q:a 2</code> MP3 音质(0~9,越小越好)<br>
+      <code>-c:v libx264</code> H.264 <code>-crf 23</code> 画质(越小越好,18~28) <code>-b:v 2000k</code> 固定视频码率<br>
+      <code>-c copy</code> 不重新编码(最快、无损)
+    </div>
+  </details>
+
+  <button id="go" disabled>开始转换</button><button id="stop" class="alt" hidden>取消</button>
+  <progress id="bar" max="1" value="0" hidden></progress>
+  <div id="status"></div>
+  <div id="result" hidden><a id="dl" class="btn" download>保存到手机</a></div>
+</div>
+<footer>转换在你的浏览器里完成,文件不会上传到服务器。转换期间请保持屏幕亮起、不要切换页面。</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+/* ===== 可调整的配置 ===== */
+const MAX_MB = 200;                       // 源文件大小上限(MB),超过则不允许选择
+const CORE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
+
+const $ = s => document.querySelector(s);
+const KIND = {mp3:'a', m4a:'a', ogg:'a', wav:'l', flac:'l', mp4:'v', mkv:'v', webm:'v', gif:'g'}; // a有损音频 l无损音频 v视频 g动图
+const AUDIO_DEF = {mp3:'VBR 约 190 kbps', m4a:'192 kbps', ogg:'质量 5 约 160 kbps', mp4:'128 kbps', mkv:'128 kbps', webm:'128 kbps'};
+const CRF = {x264:{hi:18, mid:23, lo:28}, vp9:{hi:24, mid:32, lo:40}};
+const VIDEO_DEF = {mp4:'crf-mid', webm:'crf-mid', mkv:'copy'};
+const RES = [['', '保持原分辨率'], ['3840x2160', '3840x2160(4K)'], ['2560x1440', '2560x1440(2K)'], ['1920x1080', '1920x1080(1080p)'],
+  ['1280x720', '1280x720(720p)'], ['854x480', '854x480(480p)'], ['640x360', '640x360(360p)'], ['custom', '自定义…']];
+const VBR = [['copy', '不重新编码(最快)'], ['crf-hi', '高画质(文件较大)'], ['crf-mid', '标准画质(推荐)'], ['crf-lo', '小体积(画质较低)'],
+  ['8000', '固定 8000 kbps'], ['4000', '固定 4000 kbps'], ['2000', '固定 2000 kbps'], ['1000', '固定 1000 kbps'], ['500', '固定 500 kbps']];
+const ABR = ['64k', '96k', '128k', '160k', '192k', '256k', '320k'];
+
+let file = null, duration = 0, ff = null, cancelled = false, nameEdited = false, blobUrl = '', timer = 0, logs = [];
+
+$('#lim').textContent = MAX_MB;
+const status = (t, c = '') => { const s = $('#status'); s.textContent = t; s.className = c; };
+const fill = (sel, items, cur) => sel.innerHTML = items.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('');
+const pad = n => String(n).padStart(2, '0');
+const fmtT = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' + pad(m) : m) + ':' + pad(s % 60); };
+const mb = b => (b / 1048576).toFixed(b > 10485760 ? 0 : 1);
+function parseT(s){
+  s = s.trim(); if (!s) return null;
+  if (!/^\d+(:\d+){0,2}(\.\d+)?$/.test(s)) return NaN;
+  return s.split(':').reduce((t, p) => t * 60 + parseFloat(p), 0);
+}
+
+/* ---------- 分辨率 / 码率 -> 转换参数 ---------- */
+function getRes(){                          // null 不缩放 / false 自定义格式错误 / {w,h}
+  const v = $('#res').value;
+  if (!v) return null;
+  if (v === 'custom') { const m = /^(\d{2,5})\s*[xX×*]\s*(\d{2,5})$/.exec($('#cres').value.trim()); return m ? {w: m[1], h: m[2]} : false; }
+  const [w, h] = v.split('x'); return {w, h};
+}
+// 按比例缩小到不超过 w x h,不会放大;视频要求宽高为偶数
+function scaleF(r, even){
+  const k = `min(1\\,min(${r.w}/iw\\,${r.h}/ih))`;
+  return even ? `scale=trunc(iw*${k}/2)*2:trunc(ih*${k}/2)*2` : `scale=iw*${k}:ih*${k}:flags=lanczos`;
+}
+function audioArgs(f, a){
+  const ab = $('#abr').value, auto = ab === 'auto';
+  if (f === 'mp3') a.push('-c:a libmp3lame', auto ? '-q:a 2' : '-b:a ' + ab);
+  else if (f === 'ogg') a.push('-c:a libvorbis', auto ? '-q:a 5' : '-b:a ' + ab);
+  else if (f === 'm4a') a.push('-c:a aac', '-b:a ' + (auto ? '192k' : ab));
+  else if (f === 'webm') a.push('-c:a libopus', '-b:a ' + (auto ? '128k' : ab));
+  else a.push('-c:a aac', '-b:a ' + (auto ? '128k' : ab));
+}
+function build(){
+  const f = $('#fmt').value, kind = KIND[f], vbr = $('#vbr').value, res = getRes(), a = [];
+  if (kind === 'l') a.push('-vn', f === 'wav' ? '-c:a pcm_s16le' : '-c:a flac');
+  else if (kind === 'a') { a.push('-vn'); audioArgs(f, a); }
+  else if (kind === 'g') a.push('-vf fps=12' + (res ? ',' + scaleF(res, false) : ''), '-loop 0');
+  else if (vbr === 'copy') a.push('-c copy');
+  else {
+    a.push('-c:v ' + (f === 'webm' ? 'libvpx-vp9' : 'libx264'));
+    if (f !== 'webm') a.push('-preset veryfast');          // 手机上优先速度
+    if (vbr.startsWith('crf-')) { a.push('-crf ' + CRF[f === 'webm' ? 'vp9' : 'x264'][vbr.slice(4)]); if (f === 'webm') a.push('-b:v 0'); }
+    else a.push('-b:v ' + vbr + 'k');
+    if (res) a.push('-vf ' + scaleF(res, true));
+    if (f === 'mp4') a.push('-pix_fmt yuv420p');
+    audioArgs(f, a);
+    if (f === 'mp4') a.push('-movflags +faststart');
+  }
+  $('#args').value = a.join(' ');
+}
+function layout(){
+  const f = $('#fmt').value, kind = KIND[f], copy = kind === 'v' && $('#vbr').value === 'copy';
+  $('#cRes').hidden = !(kind === 'v' || kind === 'g');
+  $('#cVbr').hidden = kind !== 'v';
+  $('#cAbr').hidden = !(kind === 'a' || kind === 'v');
+  $('#opts').hidden = kind === 'l';
+  $('#res').disabled = $('#abr').disabled = copy;
+  $('#cres').hidden = !($('#res').value === 'custom' && !copy);
+  $('#optHint').textContent = copy ? '直接复制不重新编码,最快、画质无损;此时不能改分辨率和音频码率。'
+    : (kind === 'v' || kind === 'g') ? '分辨率按比例缩小到不超过所选尺寸,不会变形、不会放大。码率越高画质越好、文件越大。'
+    : kind === 'a' ? '码率越高音质越好、文件越大。' : '';
+}
+function autoName(){
+  if (!file || nameEdited) return;
+  const ext = (file.name.match(/\.([^.]+)$/) || [, ''])[1].toLowerCase();
+  $('#name').value = file.name.replace(/\.[^.]+$/, '') + (ext === $('#fmt').value ? '_转换' : '');
+}
+function setup(){
+  const f = $('#fmt').value, kind = KIND[f];
+  let v = VBR.slice(); if (f === 'webm') v = v.slice(1);
+  fill($('#res'), RES, kind === 'g' ? '640x360' : '');
+  fill($('#vbr'), v, VIDEO_DEF[f] || 'crf-mid');
+  fill($('#abr'), [['auto', `默认(${AUDIO_DEF[f] || ''})`], ...ABR.map(x => [x, x.replace('k', ' kbps')])], 'auto');
+  $('#ext').textContent = '.' + f;
+  layout(); build(); autoName();
+}
+$('#fmt').innerHTML = Object.keys(KIND).map(k => `<option>${k}</option>`).join('');
+$('#fmt').onchange = $('#restore').onclick = setup;
+for (const id of ['#res', '#vbr', '#abr']) $(id).onchange = () => { layout(); build(); };
+$('#cres').oninput = build;
+$('#name').oninput = () => nameEdited = true;
+setup();
+
+/* ---------- 选择源文件(限制大小)+ 读取信息 ---------- */
+function probe(f){
+  return new Promise(res => {
+    const el = document.createElement(f.type.startsWith('audio') ? 'audio' : 'video'), u = URL.createObjectURL(f);
+    const done = v => { URL.revokeObjectURL(u); res(v); };
+    el.preload = 'metadata';
+    el.onloadedmetadata = () => done({d: el.duration, w: el.videoWidth || 0, h: el.videoHeight || 0});
+    el.onerror = () => done(null);
+    setTimeout(() => done(null), 4000);
+    el.src = u;
+  });
+}
+$('#src').onchange = async e => {
+  const f = e.target.files[0], info = $('#info');
+  file = null; duration = 0; $('#go').disabled = true; info.className = 'hint'; status('');
+  if (!f) { info.textContent = ''; return; }
+  if (f.size > MAX_MB * 1048576) {
+    e.target.value = '';
+    info.textContent = `文件 ${mb(f.size)} MB,超过 ${MAX_MB} MB 上限,请选择更小的文件(可先用手机相册剪短)。`;
+    info.className = 'hint warn';
+    return;
+  }
+  file = f; nameEdited = false; autoName();
+  $('#to').value = ''; $('#to').placeholder = '全部';
+  info.textContent = `${mb(f.size)} MB,正在读取信息…`;
+  const p = await probe(f), parts = [mb(f.size) + ' MB'];
+  if (p && isFinite(p.d)) { duration = p.d; parts.push('时长 ' + fmtT(p.d)); $('#to').placeholder = '全部(' + fmtT(p.d) + ')'; }
+  if (p && p.w) parts.push(`分辨率 ${p.w}x${p.h}`);
+  info.textContent = parts.join(',') + (p ? '' : '(浏览器无法预览此文件的信息,仍可尝试转换)');
+  if (f.size > MAX_MB * 524288) { info.textContent += '。文件较大,手机内存不足时可能失败。'; info.className = 'hint warn'; }
+  $('#go').disabled = false;
+};
+
+/* ---------- 转换 ---------- */
+function setBusy(b){ $('#go').disabled = b; $('#stop').hidden = !b; $('#bar').hidden = !b; $('#src').disabled = b; }
+function resetCore(){ try { ff && ff.exit(); } catch (e) {} ff = null; }
+
+$('#go').onclick = async () => {
+  if (!file) return status('请先选择源文件', 'err');
+  if (typeof FFmpeg === 'undefined') return status('转换组件加载失败,请检查网络后刷新页面。', 'err');
+  const name = $('#name').value.trim(), fmt = $('#fmt').value;
+  if (!name) return status('请填写保存的文件名', 'err');
+  if (/[\\\/:*?"<>|]/.test(name)) return status('文件名不能包含 \\ / : * ? " < > |', 'err');
+  if (!$('#cres').hidden && getRes() === false) return status('自定义分辨率格式不对,请填写如 1000x562', 'err');
+  const t0 = parseT($('#from').value) ?? 0, t1 = parseT($('#to').value);
+  if (Number.isNaN(t0) || Number.isNaN(t1)) return status('时间格式不对,可填 90、1:30 或 01:02:03.5', 'err');
+  if (t1 !== null && t1 <= t0) return status('结束时间必须大于开始时间', 'err');
+  if (duration && t0 >= duration) return status(`开始时间超过了文件时长(${fmtT(duration)})`, 'err');
+  const args = $('#args').value.trim().split(/\s+/).filter(Boolean);
+  if (!args.length) { build(); return $('#go').click(); }
+
+  setBusy(true); cancelled = false; logs = []; $('#result').hidden = true;
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  const t = Date.now(), inName = 'in' + ((file.name.match(/\.[A-Za-z0-9]{1,5}$/) || ['.bin'])[0]), outName = 'out.' + fmt;
+  try {
+    if (!ff) {
+      status('正在加载转换内核(首次约 25 MB,之后有缓存)…');
+      ff = FFmpeg.createFFmpeg({corePath: CORE});
+      ff.setLogger(({message}) => { logs.push(message); if (logs.length > 30) logs.shift(); });
+      await ff.load();
+      $('#ver').textContent = 'wasm';
+    }
+    $('#bar').removeAttribute('value');
+    ff.setProgress(({ratio}) => { if (ratio > 0 && ratio <= 1) $('#bar').value = ratio; });
+    timer = setInterval(() => status(`转换中… 已用 ${Math.floor((Date.now() - t) / 1000)} 秒`), 500);
+    ff.FS('writeFile', inName, await FFmpeg.fetchFile(file));
+    await ff.run(...(t0 > 0 ? ['-ss', String(t0)] : []), '-i', inName, ...(t1 === null ? [] : ['-t', String(t1 - t0)]), ...args, outName);
+    const data = ff.FS('readFile', outName);
+    try { ff.FS('unlink', inName); ff.FS('unlink', outName); } catch (e) {}
+    const blob = new Blob([data.buffer], {type: 'application/octet-stream'});
+    blobUrl = URL.createObjectURL(blob);
+    $('#dl').href = blobUrl; $('#dl').download = name + '.' + fmt;
+    $('#result').hidden = false;
+    status(`完成(用时 ${Math.floor((Date.now() - t) / 1000)} 秒),大小 ${mb(blob.size)} MB。点下面的按钮保存。`, 'ok');
+  } catch (e) {
+    const tail = logs.slice(-8).join('\n');
+    status(cancelled ? '已取消' : '转换失败\n' + tail, cancelled ? '' : 'err');
+    resetCore();
+  } finally {
+    clearInterval(timer); setBusy(false); $('#go').disabled = !file;
+  }
+};
+$('#stop').onclick = () => { cancelled = true; resetCore(); clearInterval(timer); setBusy(false); $('#go').disabled = !file; status('已取消'); };
+</script>
+</body>
+</html>
